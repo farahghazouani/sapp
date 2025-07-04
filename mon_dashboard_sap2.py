@@ -773,7 +773,7 @@ else:
                                                 color='TASKTYPE' if 'TASKTYPE' in df_user.columns else None,
                                                 log_x=True,
                                                 log_y=True,
-                                                trendline="ols", # RE-ADDED: trendline="ols" - requires 'statsmodels'
+                                                # Removed: trendline="ols" - requires 'statsmodels' which causes installation issues
                                                 color_discrete_sequence=px.colors.qualitative.Alphabet)
                 st.plotly_chart(fig_resp_cpu_corr, use_container_width=True)
             else:
@@ -985,8 +985,12 @@ else:
                 task_counts.columns = ['TASKTYPE', 'Count']
                 
                 min_count_for_pie = task_counts['Count'].sum() * 0.01
-                significant_tasks = task_counts[task_counts['Count'] >= min_count_for_pie]
-                other_tasks_count = task_counts[task_counts['Count'] < min_count_for_pie]['Count'].sum()
+                significant_tasks = pd.DataFrame() # Initialize as empty DataFrame
+                other_tasks_count = 0
+
+                if not task_counts.empty:
+                    significant_tasks = task_counts[task_counts['Count'] >= min_count_for_pie]
+                    other_tasks_count = task_counts[task_counts['Count'] < min_count_for_pie]['Count'].sum()
 
                 if other_tasks_count > 0:
                     significant_tasks = pd.concat([significant_tasks, pd.DataFrame([{'TASKTYPE': 'Autres Petites Tâches', 'Count': other_tasks_count}])])
@@ -1012,15 +1016,15 @@ else:
                 temp_task_perf = df_task.groupby('TASKTYPE', as_index=False)[perf_cols_task].mean()
                 
                 if not temp_task_perf.empty and 'RESPTI' in temp_task_perf.columns and pd.api.types.is_numeric_dtype(temp_task_perf['RESPTI']): # Check before nlargest and division
-                    if temp_task_perf['RESPTI'].dropna().count() >= 10: # Check if at least 10 non-NaN values for nlargest
-                        task_perf_intermediate = temp_task_perf.nlargest(10, 'RESPTI').sort_values(by='RESPTI', ascending=False)
-                        if not task_perf_intermediate.empty and task_perf_intermediate['RESPTI'].sum() > 0:
+                    if temp_task_perf['RESPTI'].dropna().count() >= 10: # Check if at least 10 non-NaN values
+                        top_task_perf_intermediate = temp_task_perf.nlargest(10, 'RESPTI').sort_values(by='RESPTI', ascending=False)
+                        if not top_task_perf_intermediate.empty and top_task_perf_intermediate['RESPTI'].sum() > 0:
                             # Ensure columns are numeric before division
                             for col in perf_cols_task:
-                                task_perf_intermediate[col] = pd.to_numeric(task_perf_intermediate[col], errors='coerce').fillna(0).astype(float)
+                                top_task_perf_intermediate[col] = pd.to_numeric(top_task_perf_intermediate[col], errors='coerce').fillna(0).astype(float)
                             
-                            # Apply division only to the numeric columns
-                            task_perf = task_perf_intermediate.copy() # Create a copy
+                            # Apply division only to the numeric column
+                            task_perf = top_task_perf_intermediate.copy() # Create a copy
                             for col in perf_cols_task:
                                 task_perf[col] = task_perf[col] / 1000.0
                             
@@ -1077,9 +1081,11 @@ else:
                 * **CHNGCNT (Changements)** : Nombre de changements (écritures) d'enregistrements.
                 * **PHYREADCNT (Lectures Physiques)** : Nombre total de lectures physiques (sur le disque).
                 * **PHYCHNGREC (Changements Physiques)** : Nombre total d'enregistrements physiquement modifiés.
+                * **READDIRREC (Enregistrements Lus Directement)** : Nombre d'enregistrements lus directement.
                 Ces métriques sont essentielles pour identifier les tâches gourmandes en E/S et évaluer l'efficacité de l'accès aux données.
                 """)
-            io_metrics_tasktimes = ['READDIRCNT', 'READSEQCNT', 'CHNGCNT', 'PHYREADCNT', 'PHYCHNGREC']
+            # FIX: Added 'READDIRREC' to the list so it's available for nlargest
+            io_metrics_tasktimes = ['READDIRCNT', 'READSEQCNT', 'CHNGCNT', 'PHYREADCNT', 'PHYCHNGREC', 'READDIRREC']
             if 'TASKTYPE' in df_task.columns and all(col in df_task.columns for col in io_metrics_tasktimes) and df_task[io_metrics_tasktimes].sum().sum() > 0:
                 # Ensure numeric types here
                 for col in io_metrics_tasktimes:
@@ -1094,7 +1100,7 @@ else:
                 else:
                     st.info("Données insuffisantes pour l'analyse des opérations d'E/S après filtrage.")
             else:
-                st.info("Colonnes d'E/S manquantes ou leurs sommes sont zéro/vides après filtrage.")
+                pass
 
 
             st.subheader("Aperçu des Données des Temps de Tâches Filtrées")
@@ -1103,9 +1109,11 @@ else:
             st.warning("Données des temps de tâches non disponibles ou filtrées à vide.")
 
     elif st.session_state.current_section == "Insights Hitlist DB":
-        # --- Onglet 5: Insights Hitlist Database (HITLIST_DATABASE_final_cleaned_clean.xlsx) ---
-        st.header("🔍 Insights de la Base de Données Hitlist")
-        df_hitlist = df_hitlist_filtered.copy()
+        # --- NOUVEL ONGLET: Insights Détaillés de la Base de Données (Hitlist DB) ---
+        st.header("🔍 Insights Détaillés de la Base de Données (Hitlist DB)")
+        df_hitlist = dfs['hitlist_db'].copy()
+        
+        # Appliquer les filtres globaux si disponibles
         if selected_accounts:
             if 'ACCOUNT' in df_hitlist.columns:
                 df_hitlist = df_hitlist[df_hitlist['ACCOUNT'].isin(selected_accounts)]
@@ -1122,92 +1130,94 @@ else:
             else:
                 st.warning("La colonne 'TASKTYPE' est manquante dans les données Hitlist DB pour le filtrage.")
 
-
         if not df_hitlist.empty:
-            if 'FULL_DATETIME' in df_hitlist.columns and pd.notna(df_hitlist['FULL_DATETIME'].min()) and pd.notna(df_hitlist['FULL_DATETIME'].max()):
-                st.info(f"Données affichées pour la période: "
-                        f"**{df_hitlist['FULL_DATETIME'].min().strftime('%Y-%m-%d %H:%M')}** à "
-                        f"**{df_hitlist['FULL_DATETIME'].max().strftime('%Y-%m-%d %H:%M')}**")
-            else:
-                st.info("La plage de dates pour HITLIST_DATABASE n'a pas pu être déterminée ou est vide.")
-
-            st.subheader("Tendance du Temps de Réponse Moyen et Temps CPU par Heure (Hitlist DB)")
-            hitlist_perf_cols = ['RESPTI', 'CPUTI']
-            if 'FULL_DATETIME' in df_hitlist.columns and all(col in df_hitlist.columns for col in hitlist_perf_cols) and pd.api.types.is_datetime64_any_dtype(df_hitlist['FULL_DATETIME']) and not df_hitlist[hitlist_perf_cols].sum().sum() == 0:
-                # Ensure numeric types here
-                for col in hitlist_perf_cols:
-                    df_hitlist[col] = pd.to_numeric(df_hitlist[col], errors='coerce').fillna(0).astype(float)
-                hourly_metrics_temp = df_hitlist.set_index('FULL_DATETIME')[hitlist_perf_cols].resample('H').mean()
-                if not hourly_metrics_temp.empty and hourly_metrics_temp.sum().sum() > 0:
-                    hourly_metrics = hourly_metrics_temp.dropna()
-                    if not hourly_metrics.empty and hourly_metrics.sum().sum() > 0: # Check again after dropna
-                        # Apply division only to the numeric columns
-                        hourly_metrics_divided = hourly_metrics.copy() # Create a copy
-                        for col in hitlist_perf_cols:
-                            hourly_metrics_divided[col] = hourly_metrics_divided[col] / 1000.0
-
-                        fig_hourly_perf = px.line(hourly_metrics_divided.reset_index(), x='FULL_DATETIME', y=hitlist_perf_cols,
-                                                  title="Tendance Horaire du Temps de Réponse et CPU (s)",
-                                                  labels={'FULL_DATETIME': 'Heure', 'value': 'Temps Moyen (s)', 'variable': 'Métrique'},
-                                                  color_discrete_sequence=px.colors.qualitative.Dark2)
-                        fig_hourly_perf.update_xaxes(dtick="H1", tickformat="%H:%M")
-                        st.plotly_chart(fig_hourly_perf, use_container_width=True)
-                    else:
-                        st.info("Pas de données valides pour la tendance horaire de performance Hitlist DB après filtrage et dropna.")
+            st.subheader("Top 10 Rapports par Temps de Réponse Moyen (RESPTI)")
+            if 'REPORT' in df_hitlist.columns and 'RESPTI' in df_hitlist.columns and df_hitlist['RESPTI'].sum() > 0:
+                df_hitlist['RESPTI'] = pd.to_numeric(df_hitlist['RESPTI'], errors='coerce').fillna(0).astype(float)
+                top_reports_resp = df_hitlist.groupby('REPORT', as_index=False)['RESPTI'].mean().nlargest(10, 'RESPTI')
+                if not top_reports_resp.empty and top_reports_resp['RESPTI'].sum() > 0:
+                    fig_top_reports_resp = px.bar(top_reports_resp,
+                                                  x='REPORT', y='RESPTI',
+                                                  title="Top 10 Rapports par Temps de Réponse Moyen (ms)",
+                                                  labels={'RESPTI': 'Temps de Réponse Moyen (ms)', 'REPORT': 'Rapport'},
+                                                  color='RESPTI', color_continuous_scale=px.colors.sequential.Sunset)
+                    st.plotly_chart(fig_top_reports_resp, use_container_width=True)
                 else:
-                    st.info("Pas de données valides pour la tendance horaire de performance Hitlist DB après filtrage.")
+                    st.info("Pas de données valides pour les Top 10 Rapports par Temps de Réponse Moyen après filtrage.")
             else:
-                st.info("Colonnes 'FULL_DATETIME', 'RESPTI' ou 'CPUTI' manquantes/invalides dans Hitlist DB ou leurs totaux sont zéro/vide.")
+                st.info("Colonnes 'REPORT' ou 'RESPTI' manquantes ou RESPTI total est zéro/vide après filtrage.")
 
-            st.subheader("Top 10 Rapports (REPORT) par Appels Base de Données (DBCALLS)")
-            if 'REPORT' in df_hitlist.columns and 'DBCALLS' in df_hitlist.columns and df_hitlist['DBCALLS'].sum() > 0:
-                # Ensure DBCALLS is numeric here
+            st.subheader("Top 10 Comptes par Nombre d'Appels Base de Données (DBCALLS)")
+            if 'ACCOUNT' in df_hitlist.columns and 'DBCALLS' in df_hitlist.columns and df_hitlist['DBCALLS'].sum() > 0:
                 df_hitlist['DBCALLS'] = pd.to_numeric(df_hitlist['DBCALLS'], errors='coerce').fillna(0).astype(float)
-                top_reports_dbcalls = df_hitlist.groupby('REPORT', as_index=False)['DBCALLS'].sum().nlargest(10, 'DBCALLS')
-                if not top_reports_dbcalls.empty and top_reports_dbcalls['DBCALLS'].sum() > 0:
-                    fig_top_reports_db = px.bar(top_reports_dbcalls, x='REPORT', y='DBCALLS',
-                                                title="Top 10 Rapports par Total Appels DB",
-                                                labels={'REPORT': 'Rapport', 'DBCALLS': 'Total Appels DB'},
-                                                color='DBCALLS', color_continuous_scale=px.colors.sequential.dense)
-                    st.plotly_chart(fig_top_reports_db, use_container_width=True)
+                top_accounts_db_calls = df_hitlist.groupby('ACCOUNT', as_index=False)['DBCALLS'].sum().nlargest(10, 'DBCALLS')
+                if not top_accounts_db_calls.empty and top_accounts_db_calls['DBCALLS'].sum() > 0:
+                    fig_top_accounts_db_calls = px.bar(top_accounts_db_calls,
+                                                       x='ACCOUNT', y='DBCALLS',
+                                                       title="Top 10 Comptes par Nombre d'Appels Base de Données",
+                                                       labels={'DBCALLS': 'Nombre Total d\'Appels DB', 'ACCOUNT': 'Compte Utilisateur'},
+                                                       color='DBCALLS', color_continuous_scale=px.colors.sequential.Mint)
+                    st.plotly_chart(fig_top_accounts_db_calls, use_container_width=True)
                 else:
-                    st.info("Pas de données valides pour les Top 10 Rapports par Appels DB Hitlist après filtrage.")
+                    st.info("Pas de données valides pour les Top 10 Comptes par Nombre d'Appels Base de Données après filtrage.")
             else:
-                st.info("Colonnes 'REPORT' ou 'DBCALLS' manquantes dans Hitlist DB ou DBCALLS total est zéro/vide après filtrage.")
+                st.info("Colonnes 'ACCOUNT' ou 'DBCALLS' manquantes ou DBCALLS total est zéro/vide après filtrage.")
 
-            st.subheader("Temps Moyen de Traitement (PROCTI) par Top 5 Types de Tâches (TASKTYPE)")
-            if 'TASKTYPE' in df_hitlist.columns and 'PROCTI' in df_hitlist.columns and df_hitlist['PROCTI'].sum() > 0:
-                # Ensure PROCTI is numeric here
-                df_hitlist['PROCTI'] = pd.to_numeric(df_hitlist['PROCTI'], errors='coerce').fillna(0).astype(float)
-                top_5_tasktypes = df_hitlist['TASKTYPE'].value_counts().nlargest(5).index.tolist()
-                df_filtered_tasktype = df_hitlist.loc[df_hitlist['TASKTYPE'].isin(top_5_tasktypes)].copy()
-                
-                if not df_filtered_tasktype.empty:
-                    avg_procti_by_tasktype_temp = df_filtered_tasktype.groupby('TASKTYPE', as_index=False)['PROCTI'].mean()
-                    if not avg_procti_by_tasktype_temp.empty and avg_procti_by_tasktype_temp['PROCTI'].sum() > 0:
-                        # Apply division only to the 'PROCTI' column
-                        avg_procti_by_tasktype = avg_procti_by_tasktype_temp.copy() # Create a copy
-                        avg_procti_by_tasktype['PROCTI'] = avg_procti_by_tasktype['PROCTI'] / 1000.0
-                        
-                        if not avg_procti_by_tasktype.empty and avg_procti_by_tasktype['PROCTI'].sum() > 0:
-                            fig_procti_bar = px.bar(avg_procti_by_tasktype, x='TASKTYPE', y='PROCTI',
-                                                    title="Temps Moyen de Traitement (s) par Top 5 TASKTYPE",
-                                                    labels={'TASKTYPE': 'Type de Tâche', 'PROCTI': 'Temps Moyen de Traitement (s)'},
-                                                    color='PROCTI', color_continuous_scale=px.colors.sequential.Sunset)
-                            st.plotly_chart(fig_procti_bar, use_container_width=True)
-                        else:
-                            st.info("Pas de données valides pour le temps moyen de traitement par TASKTYPE après filtrage et division.")
-                    else:
-                        st.info("Pas de données valides pour le temps moyen de traitement par TASKTYPE après filtrage (la moyenne est vide ou zéro).")
+            st.subheader("Distribution du Temps de Réponse (RESPTI) - Courbe de Densité")
+            if 'RESPTI' in df_hitlist.columns and df_hitlist['RESPTI'].sum() > 0:
+                df_hitlist['RESPTI'] = pd.to_numeric(df_hitlist['RESPTI'], errors='coerce').fillna(0).astype(float)
+                if df_hitlist['RESPTI'].nunique() > 1:
+                    fig_dist_resp_time = ff.create_distplot([df_hitlist['RESPTI'].dropna()], ['RESPTI'],
+                                                            bin_size=df_hitlist['RESPTI'].std()/5 if df_hitlist['RESPTI'].std() > 0 else 1,
+                                                            show_rug=False, show_hist=False)
+                    fig_dist_resp_time.update_layout(title_text="Distribution du Temps de Réponse (RESPTI)",
+                                                     xaxis_title='Temps de Réponse (ms)',
+                                                     yaxis_title='Densité')
+                    fig_dist_resp_time.data[0].line.color = 'darkred'
+                    st.plotly_chart(fig_dist_resp_time, use_container_width=True)
                 else:
-                    st.info("Pas de données pour les Top 5 TASKTYPE pour le graphique (Hitlist DB) après filtrage.")
+                    st.info("La colonne 'RESPTI' contient des valeurs uniques ou est vide après filtrage, impossible de créer une courbe de densité.")
             else:
-                st.info("Colonnes 'TASKTYPE' ou 'PROCTI' manquantes dans Hitlist DB ou PROCTI total est zéro/vide après filtrage.")
-            
+                st.info("Colonne 'RESPTI' manquante ou total est zéro/vide après filtrage.")
+
+            # --- DÉBUT DU BLOC SUPPRIMÉ ---
+            # st.subheader("Corrélation entre Temps de Réponse (RESPTI) et Temps CPU (CPUTI)")
+            # if 'RESPTI' in df_hitlist.columns and 'CPUTI' in df_hitlist.columns and df_hitlist['RESPTI'].sum() > 0 and df_hitlist['CPUTI'].sum() > 0:
+            #     df_hitlist['RESPTI'] = pd.to_numeric(df_hitlist['RESPTI'], errors='coerce').fillna(0).astype(float)
+            #     df_hitlist['CPUTI'] = pd.to_numeric(df_hitlist['CPUTI'], errors='coerce').fillna(0).astype(float)
+            #     fig_resp_cpu_hitlist = px.scatter(df_hitlist, x='CPUTI', y='RESPTI',
+            #                                       title="Temps de Réponse vs. Temps CPU (Hitlist DB)",
+            #                                       labels={'CPUTI': 'Temps CPU (ms)', 'RESPTI': 'Temps de Réponse (ms)'},
+            #                                       hover_data=['ACCOUNT', 'REPORT', 'TASKTYPE'],
+            #                                       color='TASKTYPE' if 'TASKTYPE' in df_hitlist.columns else None,
+            #                                       log_x=True,
+            #                                       log_y=True,
+            #                                       color_discrete_sequence=px.colors.qualitative.Plotly)
+            #     st.plotly_chart(fig_resp_cpu_hitlist, use_container_width=True)
+            # else:
+            #     st.info("Colonnes 'RESPTI' ou 'CPUTI' manquantes ou leurs totaux sont zéro/vides après filtrage pour la corrélation.")
+            # --- FIN DU BLOC SUPPRIMÉ ---
+
+            st.subheader("Tendance du Temps de Réponse Moyen par Heure (Hitlist DB)")
+            if 'FULL_DATETIME' in df_hitlist.columns and pd.api.types.is_datetime64_any_dtype(df_hitlist['FULL_DATETIME']) and not df_hitlist['FULL_DATETIME'].isnull().all() and 'RESPTI' in df_hitlist.columns and df_hitlist['RESPTI'].sum() > 0:
+                df_hitlist['RESPTI'] = pd.to_numeric(df_hitlist['RESPTI'], errors='coerce').fillna(0).astype(float)
+                hourly_resp_time_hitlist = df_hitlist.set_index('FULL_DATETIME')['RESPTI'].resample('H').mean().dropna() / 1000.0
+                if not hourly_resp_time_hitlist.empty:
+                    fig_hourly_resp_hitlist = px.line(hourly_resp_time_hitlist.reset_index(), x='FULL_DATETIME', y='RESPTI',
+                                                      title="Tendance du Temps de Réponse Moyen par Heure (s) - Hitlist DB",
+                                                      labels={'FULL_DATETIME': 'Heure', 'RESPTI': 'Temps de Réponse Moyen (s)'},
+                                                      color_discrete_sequence=['blue'])
+                    fig_hourly_resp_hitlist.update_xaxes(dtick="H1", tickformat="%H:%M")
+                    st.plotly_chart(fig_hourly_resp_hitlist, use_container_width=True)
+                else:
+                    st.info("Pas de données valides pour la tendance horaire du temps de réponse après filtrage.")
+            else:
+                st.info("Colonnes 'FULL_DATETIME' ou 'RESPTI' manquantes/invalides ou RESPTI total est zéro/vide après filtrage pour la tendance.")
+
             st.subheader("Aperçu des Données Hitlist DB Filtrées")
             st.dataframe(df_hitlist.head())
         else:
-            st.warning("Données Hitlist Database non disponibles ou filtrées à vide.")
+            st.warning("Données Hitlist DB non disponibles ou filtrées à vide.")
 
     elif st.session_state.current_section == "Performance des Processus de Travail":
         # --- Onglet 6: Performance des Processus de Travail (AL_GET_PERFORMANCE) ---
