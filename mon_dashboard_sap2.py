@@ -8,15 +8,18 @@ import plotly.figure_factory as ff # Importation ajoutée pour create_distplot
 from sklearn.ensemble import IsolationForest # Importation de l'algorithme Isolation Forest
 
 # --- Chemins vers vos fichiers de données ---
+# IMPORTANT : Ces chemins sont maintenant RELATIFS au répertoire où se trouve ce script.
+# Assurez-vous que vos fichiers de données (.xlsx) sont placés dans le même répertoire que ce fichier Python
+# sur votre dépôt GitHub.
 DATA_PATHS = {
-    "memory": r"C:\Users\Farouha\memory_final_cleaned_clean.xlsx",
-    "hitlist_db": r"C:\Users\Farouha\HITLIST_DATABASE_final_cleaned_clean.xlsx",
-    "times": r"C:\Users\Farouha\Times_final_cleaned_clean.xlsx",
-    "tasktimes": r"C:\Users\Farouha\TASKTIMES_final_cleaned_clean.xlsx",
-    "usertcode": r"C:\Users\Farouha\USERTCODE_cleaned.xlsx",
-    "performance": r"C:\Users\Farouha\AL_GET_PERFORMANCE_final_cleaned_clean.xlsx",
-    "sql_trace_summary": r"C:\Users\Farouha\performance_trace_summary_final_cleaned_clean.xlsx",
-    "usr02": r"c:\Users\Farouha\Desktop\fichiers_SAP\usr02_data.xlsx",
+    "memory": "memory_final_cleaned_clean.xlsx",
+    "hitlist_db": "HITLIST_DATABASE_final_cleaned_clean.xlsx",
+    "times": "Times_final_cleaned_clean.xlsx",
+    "tasktimes": "TASKTIMES_final_cleaned_clean.xlsx",
+    "usertcode": "USERTCODE_cleaned.xlsx",
+    "performance": "AL_GET_PERFORMANCE_final_cleaned_clean.xlsx",
+    "sql_trace_summary": "performance_trace_summary_final_cleaned_clean.xlsx",
+    "usr02": "usr02_data.xlsx", # Assurez-vous que ce fichier est aussi dans le même répertoire
 }
 
 # --- Configuration de la page Streamlit ---
@@ -290,16 +293,17 @@ def load_and_process_data(file_key, path):
             if subset_cols_sql:
                 df.dropna(subset=subset_cols_sql, inplace=True)
 
-        elif file_key == "usr02":
+        elif file_key == "usr02": # Nouveau bloc pour usr02_data.xlsx
             for col in ['BNAME', 'USTYP']:
                 if col in df.columns:
                     df[col] = clean_string_column(df[col])
             
             if 'GLTGB' in df.columns:
+                # Replace '00000000' with NaN, then convert to datetime
                 df['GLTGB'] = df['GLTGB'].astype(str).replace('00000000', np.nan)
                 df['GLTGB_DATE'] = pd.to_datetime(df['GLTGB'], format='%Y%m%d', errors='coerce')
             else:
-                df['GLTGB_DATE'] = pd.NaT
+                df['GLTGB_DATE'] = pd.NaT # Assign Not a Time if column is missing
 
         st.success(f"'{file_key}' chargé avec succès. {len(df)} lignes après nettoyage.")
         return df
@@ -329,8 +333,8 @@ tab_titles = [
     "Insights Hitlist DB",
     "Performance des Processus de Travail",
     "Résumé des Traces de Performance SQL",
-    "Analyse des Utilisateurs",
-    "Détection d'Anomalies" # Nouvelle section pour la détection d'anomalies
+    "Analyse des Utilisateurs", # Nouvelle section pour usr02
+    "Détection d'Anomalies"
 ]
 
 if 'current_section' not in st.session_state:
@@ -630,7 +634,7 @@ else:
                 else:
                     st.info("Aucune transaction avec un temps de réponse élevé (au-dessus du 90ème percentile) après filtrage.")
             
-            if 'FULL_DATETIME' in df_user.columns and pd.api.types.is_datetime64_any_dtype(df_user['FULL_DATETIME']) and not df_user['FULL_DATETIME'].isnull().all() and 'RESPTI' in df_user.columns and df_user['RESPTI'].sum() > 0:
+            if 'FULL_DATETIME' in df_user.columns and pd.api.types.is_datetime64_any_dtype(df_user['FULL_DATETIME']) and not df_user['FULL_DATETIME'].isnull().all() and df_user['RESPTI'].sum() > 0:
                 st.subheader("Tendance du Temps de Réponse Moyen par Heure")
                 hourly_resp_time = df_user.set_index('FULL_DATETIME')['RESPTI'].resample('H').mean().dropna() / 1000.0
                 if not hourly_resp_time.empty:
@@ -918,17 +922,13 @@ else:
 
     elif st.session_state.current_section == "Insights Hitlist DB":
         st.header("🔍 Insights de la Base de Données Hitlist")
-        df_hitlist = df_hitlist_filtered.copy()
+        df_hitlist = df_hitlist_filtered.copy() # Utiliser le DF filtré par date
         if selected_accounts:
-            if 'ACCOUNT' in df_hitlist.columns:
-                df_hitlist = df_hitlist[df_hitlist['ACCOUNT'].isin(selected_accounts)]
+            df_hitlist = df_hitlist[df_hitlist['ACCOUNT'].isin(selected_accounts)]
         if selected_reports:
-            if 'REPORT' in df_hitlist.columns:
-                df_hitlist = df_hitlist[df_hitlist['REPORT'].isin(selected_reports)]
+            df_hitlist = df_hitlist[df_hitlist['REPORT'].isin(selected_reports)]
         if selected_tasktypes:
-            if 'TASKTYPE' in df_hitlist.columns:
-                df_hitlist = df_hitlist[df_hitlist['TASKTYPE'].isin(selected_tasktypes)]
-
+            df_hitlist = df_hitlist[df_hitlist['TASKTYPE'].isin(selected_tasktypes)]
 
         if not df_hitlist.empty:
             if 'FULL_DATETIME' in df_hitlist.columns and pd.notna(df_hitlist['FULL_DATETIME'].min()) and pd.notna(df_hitlist['FULL_DATETIME'].max()):
@@ -994,219 +994,94 @@ else:
             st.warning("Données Hitlist Database non disponibles ou filtrées à vide.")
 
     elif st.session_state.current_section == "Performance des Processus de Travail":
-        st.header("⚡ Performance des Processus de Travail")
+        st.header("📈 Performance des Processus de Travail (Work Processes)")
         df_perf = dfs['performance'].copy()
-
         if selected_wp_types:
-            if 'WP_TYP' in df_perf.columns:
-                df_perf = df_perf[df_perf['WP_TYP'].isin(selected_wp_types)]
+            df_perf = df_perf[df_perf['WP_TYP'].isin(selected_wp_types)]
 
         if not df_perf.empty:
-            st.subheader("Distribution du Temps CPU des Processus de Travail (en secondes)")
-            if 'WP_CPU_SECONDS' in df_perf.columns and df_perf['WP_CPU_SECONDS'].sum() > 0:
-                if df_perf['WP_CPU_SECONDS'].nunique() > 1:
-                    fig_cpu_dist = ff.create_distplot([df_perf['WP_CPU_SECONDS'].dropna()], ['Temps CPU (s)'],
-                                                      bin_size=df_perf['WP_CPU_SECONDS'].std()/5,
-                                                      show_rug=False, show_hist=False)
-                    fig_cpu_dist.update_layout(title_text="Distribution du Temps CPU des Processus de Travail",
-                                               xaxis_title='Temps CPU (secondes)',
-                                               yaxis_title='Densité')
-                    fig_cpu_dist.data[0].line.color = 'darkblue'
-                    st.plotly_chart(fig_cpu_dist, use_container_width=True)
-                else:
-                    st.info("La colonne 'WP_CPU_SECONDS' contient des valeurs uniques ou est vide après filtrage, impossible de créer une courbe de densité.")
+            st.subheader("Temps CPU Total (WP_CPU_SECONDS) par Type de Processus de Travail (WP_TYP)")
+            if 'WP_TYP' in df_perf.columns and 'WP_CPU_SECONDS' in df_perf.columns and df_perf['WP_CPU_SECONDS'].sum() > 0:
+                cpu_by_wp_type = df_perf.groupby('WP_TYP')['WP_CPU_SECONDS'].sum().sort_values(ascending=False)
+                fig_cpu_wp_type = px.bar(cpu_by_wp_type.reset_index(),
+                                         x='WP_TYP', y='WP_CPU_SECONDS',
+                                         title="Temps CPU Total par Type de Processus de Travail",
+                                         labels={'WP_CPU_SECONDS': 'Temps CPU Total (secondes)', 'WP_TYP': 'Type de Processus de Travail'},
+                                         color='WP_CPU_SECONDS', color_continuous_scale=px.colors.sequential.Plasma)
+                st.plotly_chart(fig_cpu_wp_type, use_container_width=True)
             else:
-                st.info("Colonne 'WP_CPU_SECONDS' manquante ou total est zéro/vide après filtrage.")
+                st.info("Colonnes 'WP_TYP' ou 'WP_CPU_SECONDS' manquantes ou le temps CPU total est zéro/vide après filtrage.")
 
-            st.subheader("Répartition des Processus de Travail par Statut (WP_STATUS)")
-            if 'WP_STATUS' in df_perf.columns and not df_perf['WP_STATUS'].empty:
+            st.subheader("Temps d'Attente I/O Total (WP_IWAIT_SECONDS) par Type de Processus de Travail (WP_TYP)")
+            if 'WP_TYP' in df_perf.columns and 'WP_IWAIT_SECONDS' in df_perf.columns and df_perf['WP_IWAIT_SECONDS'].sum() > 0:
+                iowait_by_wp_type = df_perf.groupby('WP_TYP')['WP_IWAIT_SECONDS'].sum().sort_values(ascending=False)
+                fig_iowait_wp_type = px.bar(iowait_by_wp_type.reset_index(),
+                                            x='WP_TYP', y='WP_IWAIT_SECONDS',
+                                            title="Temps d'Attente I/O Total par Type de Processus de Travail",
+                                            labels={'WP_IWAIT_SECONDS': "Temps d'Attente I/O Total (secondes)", 'WP_TYP': 'Type de Processus de Travail'},
+                                            color='WP_IWAIT_SECONDS', color_continuous_scale=px.colors.sequential.Viridis)
+                st.plotly_chart(fig_iowait_wp_type, use_container_width=True)
+            else:
+                st.info("Colonnes 'WP_TYP' ou 'WP_IWAIT_SECONDS' manquantes ou le temps d'attente I/O total est zéro/vide après filtrage.")
+
+            st.subheader("Statut des Processus de Travail (WP_STATUS)")
+            if 'WP_STATUS' in df_perf.columns and not df_perf.empty:
                 status_counts = df_perf['WP_STATUS'].value_counts().reset_index()
-                status_counts.columns = ['Statut', 'Count']
-                if not status_counts.empty and status_counts['Count'].sum() > 0:
-                    fig_status_pie = px.pie(status_counts, values='Count', names='Statut',
-                                            title="Répartition des Processus de Travail par Statut",
-                                            hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
-                    st.plotly_chart(fig_status_pie, use_container_width=True)
-                else:
-                    st.info("Pas de données valides pour la répartition par statut des processus de travail après filtrage.")
+                status_counts.columns = ['WP_STATUS', 'Count']
+                fig_status = px.pie(status_counts, values='Count', names='WP_STATUS',
+                                    title="Répartition des Statuts des Processus de Travail",
+                                    color_discrete_sequence=px.colors.sequential.RdBu)
+                st.plotly_chart(fig_status, use_container_width=True)
             else:
                 st.info("Colonne 'WP_STATUS' manquante ou vide après filtrage.")
-
-            st.subheader("Nombre de Processus de Travail par Type (WP_TYP)")
-            if 'WP_TYP' in df_perf.columns and not df_perf['WP_TYP'].empty:
-                type_counts = df_perf['WP_TYP'].value_counts().reset_index()
-                type_counts.columns = ['Type', 'Count']
-                if not type_counts.empty and type_counts['Count'].sum() > 0:
-                    fig_type_bar = px.bar(type_counts, x='Type', y='Count',
-                                          title="Nombre de Processus de Travail par Type",
-                                          labels={'Type': 'Type de Processus', 'Count': 'Nombre'},
-                                          color='Count', color_continuous_scale=px.colors.sequential.Viridis)
-                    st.plotly_chart(fig_type_bar, use_container_width=True)
-                else:
-                    st.info("Pas de données valides pour le nombre de processus de travail par type après filtrage.")
-            else:
-                st.info("Colonne 'WP_TYP' manquante ou vide après filtrage.")
-
-            st.subheader("Temps CPU Moyen par Type de Processus de Travail (en secondes)")
-            if 'WP_TYP' in df_perf.columns and 'WP_CPU_SECONDS' in df_perf.columns and df_perf['WP_CPU_SECONDS'].sum() > 0:
-                avg_cpu_by_type = df_perf.groupby('WP_TYP')['WP_CPU_SECONDS'].mean().reset_index()
-                if not avg_cpu_by_type.empty and avg_cpu_by_type['WP_CPU_SECONDS'].sum() > 0:
-                    fig_avg_cpu_type = px.bar(avg_cpu_by_type, x='WP_TYP', y='WP_CPU_SECONDS',
-                                              title="Temps CPU Moyen par Type de Processus de Travail",
-                                              labels={'WP_TYP': 'Type de Processus', 'WP_CPU_SECONDS': 'Temps CPU Moyen (s)'},
-                                              color='WP_CPU_SECONDS', color_continuous_scale=px.colors.sequential.Plasma)
-                    st.plotly_chart(fig_avg_cpu_type, use_container_width=True)
-                else:
-                    st.info("Pas de données valides pour le temps CPU moyen par type de processus de travail après filtrage.")
-            else:
-                st.info("Colonnes 'WP_TYP' ou 'WP_CPU_SECONDS' manquantes ou total est zéro/vide après filtrage.")
-
-            st.subheader("Nombre Total de Redémarrages par Type de Processus de Travail (WP_IRESTRT)")
-            if 'WP_TYP' in df_perf.columns and 'WP_IRESTRT' in df_perf.columns and df_perf['WP_IRESTRT'].sum() > 0:
-                restarts_by_type = df_perf.groupby('WP_TYP')['WP_IRESTRT'].sum().nlargest(10).reset_index()
-                if not restarts_by_type.empty and restarts_by_type['WP_IRESTRT'].sum() > 0:
-                    fig_restarts_type = px.bar(restarts_by_type, x='WP_TYP', y='WP_IRESTRT',
-                                               title="Nombre Total de Redémarrages par Type de Processus de Travail",
-                                               labels={'WP_TYP': 'Type de Processus', 'WP_IRESTRT': 'Nombre Total de Redémarrages'},
-                                               color='WP_IRESTRT', color_continuous_scale=px.colors.sequential.OrRd)
-                    st.plotly_chart(fig_restarts_type, use_container_width=True)
-                else:
-                    st.info("Pas de données valides pour le nombre de redémarrages par type de processus de travail après filtrage.")
-            else:
-                st.info("Colonnes 'WP_TYP' ou 'WP_IRESTRT' manquantes ou total est zéro/vide après filtrage.")
-
-            st.subheader("Aperçu des Données de Performance Filtrées")
-            st.dataframe(df_perf.head())
         else:
-            st.warning("Données de performance non disponibles ou filtrées à vide.")
-    
+            st.warning("Le dataset 'performance' est vide ou ne contient pas les colonnes requises après filtrage.")
+
     elif st.session_state.current_section == "Résumé des Traces de Performance SQL":
         st.header("📊 Résumé des Traces de Performance SQL")
-        df_sql_trace = dfs['sql_trace_summary'].copy()
+        df_sql = dfs['sql_trace_summary'].copy()
 
-        if not df_sql_trace.empty:
-            st.subheader("Top 10 Requêtes SQL par Temps d'Exécution Total (EXECTIME)")
-            st.markdown("""
-                Ce graphique identifie les 10 requêtes SQL qui ont consommé le plus de temps d'exécution cumulé.
-                Il est crucial pour repérer les goulots d'étranglement globaux en termes de performance.
-                """)
-            if 'SQLSTATEM' in df_sql_trace.columns and 'EXECTIME' in df_sql_trace.columns and df_sql_trace['EXECTIME'].sum() > 0:
-                top_sql_by_exectime = df_sql_trace.groupby('SQLSTATEM')['EXECTIME'].sum().nlargest(10).reset_index()
-                top_sql_by_exectime['SQLSTATEM_SHORT'] = top_sql_by_exectime['SQLSTATEM'].apply(lambda x: x[:70] + '...' if len(x) > 70 else x)
-                fig_top_sql_exectime = px.bar(top_sql_by_exectime, y='SQLSTATEM_SHORT', x='EXECTIME', orientation='h',
-                                               title="Top 10 Requêtes SQL par Temps d'Exécution Total",
-                                               labels={'SQLSTATEM_SHORT': 'Instruction SQL', 'EXECTIME': 'Temps d\'Exécution Total'},
-                                               color='EXECTIME', color_continuous_scale=px.colors.sequential.Blues)
-                fig_top_sql_exectime.update_yaxes(autorange="reversed")
-                st.plotly_chart(fig_top_sql_exectime, use_container_width=True)
+        if not df_sql.empty:
+            st.subheader("Top 10 des Statements SQL par Temps d'Exécution Total (EXECTIME)")
+            if all(col in df_sql.columns for col in ['SQLSTATEM', 'EXECTIME', 'TOTALEXEC', 'RECPROCNUM']) and df_sql['EXECTIME'].sum() > 0:
+                top_sql_exec_time = df_sql.groupby('SQLSTATEM')[['EXECTIME', 'TOTALEXEC', 'RECPROCNUM']].sum().nlargest(10, 'EXECTIME')
+                fig_top_sql_exec_time = px.bar(top_sql_exec_time.reset_index(),
+                                               x='SQLSTATEM', y='EXECTIME',
+                                               title="Top 10 Statements SQL par Temps d'Exécution Total",
+                                               labels={'EXECTIME': "Temps d'Exécution Total (ms)", 'SQLSTATEM': 'Statement SQL'},
+                                               hover_data=['TOTALEXEC', 'RECPROCNUM'],
+                                               color='EXECTIME', color_continuous_scale=px.colors.sequential.Sunset)
+                st.plotly_chart(fig_top_sql_exec_time, use_container_width=True)
             else:
-                st.info("Colonnes 'SQLSTATEM' ou 'EXECTIME' manquantes ou leur total est zéro/vide après filtrage.")
+                st.info("Colonnes nécessaires (SQLSTATEM, EXECTIME, TOTALEXEC, RECPROCNUM) manquantes ou le temps d'exécution total est zéro/vide après filtrage.")
 
-            st.subheader("Top 10 Requêtes SQL par Nombre Total d'Exécutions (TOTALEXEC)")
-            st.markdown("""
-                Ce graphique met en évidence les 10 requêtes SQL les plus fréquemment exécutées.
-                Il est utile pour identifier les requêtes qui, même si elles ne sont pas individuellement lentes,
-                peuvent avoir un impact significatif sur la performance globale en raison de leur volume d'exécution élevé.
-                """)
-            if 'SQLSTATEM' in df_sql_trace.columns and 'TOTALEXEC' in df_sql_trace.columns and df_sql_trace['TOTALEXEC'].sum() > 0:
-                top_sql_by_totalexec = df_sql_trace.groupby('SQLSTATEM')['TOTALEXEC'].sum().nlargest(10).reset_index()
-                top_sql_by_totalexec['SQLSTATEM_SHORT'] = top_sql_by_totalexec['SQLSTATEM'].apply(lambda x: x[:70] + '...' if len(x) > 70 else x)
-                fig_top_sql_totalexec = px.bar(top_sql_by_totalexec, y='SQLSTATEM_SHORT', x='TOTALEXEC', orientation='h',
-                                                title="Top 10 Requêtes SQL par Nombre Total d'Exécutions",
-                                                labels={'SQLSTATEM_SHORT': 'Instruction SQL', 'TOTALEXEC': 'Nombre Total d\'Exécutions'},
-                                                color='TOTALEXEC', color_continuous_scale=px.colors.sequential.Greens)
-                fig_top_sql_totalexec.update_yaxes(autorange="reversed")
-                st.plotly_chart(fig_top_sql_totalexec, use_container_width=True)
+            st.subheader("Top 10 des Statements SQL par Nombre Total d'Exécutions (TOTALEXEC)")
+            if all(col in df_sql.columns for col in ['SQLSTATEM', 'TOTALEXEC', 'EXECTIME', 'RECPROCNUM']) and df_sql['TOTALEXEC'].sum() > 0:
+                top_sql_total_exec = df_sql.groupby('SQLSTATEM')[['TOTALEXEC', 'EXECTIME', 'RECPROCNUM']].sum().nlargest(10, 'TOTALEXEC')
+                fig_top_sql_total_exec = px.bar(top_sql_total_exec.reset_index(),
+                                                x='SQLSTATEM', y='TOTALEXEC',
+                                                title="Top 10 Statements SQL par Nombre Total d'Exécutions",
+                                                labels={'TOTALEXEC': "Nombre Total d'Exécutions", 'SQLSTATEM': 'Statement SQL'},
+                                                hover_data=['EXECTIME', 'RECPROCNUM'],
+                                                color='TOTALEXEC', color_continuous_scale=px.colors.sequential.Plasma)
+                st.plotly_chart(fig_top_sql_total_exec, use_container_width=True)
             else:
-                st.info("Colonnes 'SQLSTATEM' ou 'TOTALEXEC' manquantes ou leur total est zéro/vide après filtrage.")
+                st.info("Colonnes nécessaires (SQLSTATEM, TOTALEXEC, EXECTIME, RECPROCNUM) manquantes ou le total des exécutions est zéro/vide après filtrage.")
 
-            st.subheader("Distribution du Temps par Exécution (TIMEPEREXE)")
-            st.markdown("""
-                Cette courbe de densité montre la répartition des temps d'exécution individuels par requête.
-                Elle permet de comprendre si la plupart des exécutions sont rapides ou si certaines sont significativement plus lentes,
-                indiquant des performances inégales.
-                """)
-            if 'TIMEPEREXE' in df_sql_trace.columns and df_sql_trace['TIMEPEREXE'].sum() > 0:
-                if df_sql_trace['TIMEPEREXE'].nunique() > 1:
-                    fig_time_per_exe_dist = ff.create_distplot([df_sql_trace['TIMEPEREXE'].dropna()], ['TIMEPEREXE'],
-                                                               bin_size=df_sql_trace['TIMEPEREXE'].std()/5,
-                                                               show_rug=False, show_hist=False)
-                    fig_time_per_exe_dist.update_layout(title_text="Distribution du Temps par Exécution",
-                                                        xaxis_title='Temps par Exécution',
-                                                        yaxis_title='Densité')
-                    fig_time_per_exe_dist.data[0].line.color = 'darkgreen'
-                    st.plotly_chart(fig_time_per_exe_dist, use_container_width=True)
-                else:
-                    st.info("La colonne 'TIMEPEREXE' contient des valeurs uniques ou est vide après filtrage, impossible de créer une courbe de densité.")
+            st.subheader("Temps Moyen par Enregistrement (AVGTPERREC) par Serveur")
+            if all(col in df_sql.columns for col in ['SERVERNAME', 'AVGTPERREC', 'RECPROCNUM']) and df_sql['AVGTPERREC'].sum() > 0:
+                avg_tper_rec_server = df_sql.groupby('SERVERNAME')[['AVGTPERREC', 'RECPROCNUM']].mean().sort_values(by='AVGTPERREC', ascending=False)
+                fig_avg_tper_rec_server = px.bar(avg_tper_rec_server.reset_index(),
+                                                 x='SERVERNAME', y='AVGTPERREC',
+                                                 title="Temps Moyen par Enregistrement (AVGTPERREC) par Serveur",
+                                                 labels={'AVGTPERREC': 'Temps Moyen par Enregistrement (ms)', 'SERVERNAME': 'Nom du Serveur'},
+                                                 hover_data=['RECPROCNUM'],
+                                                 color='AVGTPERREC', color_continuous_scale=px.colors.sequential.Cividis)
+                st.plotly_chart(fig_avg_tper_rec_server, use_container_width=True)
             else:
-                st.info("Colonne 'TIMEPEREXE' manquante ou total est zéro/vide après filtrage.")
-
-            st.subheader("Distribution du Temps Moyen par Enregistrement (AVGTPERREC) pour le serveur 'ECC-VE7-00'")
-            st.markdown("""
-                Cette courbe de densité montre la répartition du temps moyen par enregistrement spécifiquement pour le serveur "ECC-VE7-00".
-                Elle permet d'analyser la cohérence des performances de ce serveur en termes de traitement des enregistrements.
-                """)
-            if 'SERVERNAME' in df_sql_trace.columns and 'AVGTPERREC' in df_sql_trace.columns:
-                df_ecc_ve7_00 = df_sql_trace[df_sql_trace['SERVERNAME'].astype(str).str.contains('ECC-VE7-00', na=False, case=False)].copy()
-                
-                if not df_ecc_ve7_00.empty and df_ecc_ve7_00['AVGTPERREC'].sum() > 0:
-                    avg_t_per_rec_data = df_ecc_ve7_00['AVGTPERREC'].dropna()
-                    
-                    if avg_t_per_rec_data.nunique() > 1:
-                        fig_ecc_ve7_00_avg_time_dist = ff.create_distplot([avg_t_per_rec_data], ['AVGTPERREC'],
-                                                                   bin_size=avg_t_per_rec_data.std()/5 if avg_t_per_rec_data.std() > 0 else 1,
-                                                                   show_rug=False, show_hist=False)
-                        fig_ecc_ve7_00_avg_time_dist.update_layout(title_text="Distribution du Temps Moyen par Enregistrement (AVGTPERREC) pour 'ECC-VE7-00'",
-                                                            xaxis_title='Temps Moyen par Enregistrement',
-                                                            yaxis_title='Densité')
-                        fig_ecc_ve7_00_avg_time_dist.data[0].line.color = 'darkblue'
-                        st.plotly_chart(fig_ecc_ve7_00_avg_time_dist, use_container_width=True)
-                    else:
-                        st.info("Données insuffisantes ou valeurs uniques pour créer une courbe de densité pour 'ECC-VE7-00' (AVGTPERREC).")
-                else:
-                    st.info("Aucune donnée valide pour le serveur 'ECC-VE7-00' ou la colonne 'AVGTPERREC' est vide/zéro après filtrage.")
-            else:
-                st.info("Colonnes 'SERVERNAME' ou 'AVGTPERREC' manquantes dans les données de traces SQL.")
-
-            st.subheader("Top 10 Requêtes SQL par Temps Moyen par Exécution (TIMEPEREXE)")
-            st.markdown("""
-                Ce graphique identifie les 10 requêtes SQL qui prennent le plus de temps en moyenne à chaque exécution.
-                Ceci est utile pour cibler les requêtes intrinsèquement lentes, même si elles ne sont pas exécutées très fréquemment.
-                """)
-            if 'SQLSTATEM' in df_sql_trace.columns and 'TIMEPEREXE' in df_sql_trace.columns and df_sql_trace['TIMEPEREXE'].sum() > 0:
-                top_sql_by_time_per_exe = df_sql_trace.groupby('SQLSTATEM')['TIMEPEREXE'].mean().nlargest(10).reset_index()
-                top_sql_by_time_per_exe['SQLSTATEM_SHORT'] = top_sql_by_time_per_exe['SQLSTATEM'].apply(lambda x: x[:70] + '...' if len(x) > 70 else x)
-                fig_top_sql_time_per_exe = px.bar(top_sql_by_time_per_exe, y='SQLSTATEM_SHORT', x='TIMEPEREXE', orientation='h',
-                                                   title="Top 10 Requêtes SQL par Temps Moyen par Exécution",
-                                                   labels={'SQLSTATEM_SHORT': 'Instruction SQL', 'TIMEPEREXE': 'Temps Moyen par Exécution'},
-                                                   color='TIMEPEREXE', color_continuous_scale=px.colors.sequential.Oranges)
-                fig_top_sql_time_per_exe.update_yaxes(autorange="reversed")
-                st.plotly_chart(fig_top_sql_time_per_exe, use_container_width=True)
-            else:
-                st.info("Colonnes 'SQLSTATEM' ou 'TIMEPEREXE' manquantes ou leur total est zéro/vide après filtrage.")
-
-            st.subheader("Top 10 Requêtes SQL par Nombre d'Enregistrements Traités (RECPROCNUM)")
-            st.markdown("""
-                Ce graphique montre les 10 requêtes SQL qui traitent le plus grand nombre d'enregistrements.
-                Cela peut indiquer des requêtes qui accèdent à de grandes quantités de données, potentiellement optimisables
-                par l'ajout d'index ou la refonte de la logique de récupération des données.
-                """)
-            if 'SQLSTATEM' in df_sql_trace.columns and 'RECPROCNUM' in df_sql_trace.columns and df_sql_trace['RECPROCNUM'].sum() > 0:
-                top_sql_by_recprocnum = df_sql_trace.groupby('SQLSTATEM')['RECPROCNUM'].sum().nlargest(10).reset_index()
-                top_sql_by_recprocnum['SQLSTATEM_SHORT'] = top_sql_by_recprocnum['SQLSTATEM'].apply(lambda x: x[:70] + '...' if len(x) > 70 else x)
-                fig_top_sql_recprocnum = px.bar(top_sql_by_recprocnum, y='SQLSTATEM_SHORT', x='RECPROCNUM', orientation='h',
-                                                 title="Top 10 Requêtes SQL par Nombre d'Enregistrements Traités",
-                                                 labels={'SQLSTATEM_SHORT': 'Instruction SQL', 'RECPROCNUM': 'Nombre d\'Enregistrements Traités'},
-                                                 color='RECPROCNUM', color_continuous_scale=px.colors.sequential.Purples)
-                fig_top_sql_recprocnum.update_yaxes(autorange="reversed")
-                st.plotly_chart(fig_top_sql_recprocnum, use_container_width=True)
-            else:
-                st.info("Colonnes 'SQLSTATEM' ou 'RECPROCNUM' manquantes ou leur total est zéro/vide après filtrage.")
-
-            st.subheader("Aperçu des Données de Traces SQL Filtrées")
-            st.dataframe(df_sql_trace.head())
+                st.info("Colonnes nécessaires (SERVERNAME, AVGTPERREC, RECPROCNUM) manquantes ou le temps moyen par enregistrement total est zéro/vide après filtrage.")
         else:
-            st.warning("Données de traces SQL non disponibles ou filtrées à vide.")
+            st.warning("Le dataset 'sql_trace_summary' est vide ou ne contient pas les colonnes requises après filtrage.")
 
     elif st.session_state.current_section == "Analyse des Utilisateurs":
         st.header("👥 Analyse des Utilisateurs")
@@ -1271,7 +1146,6 @@ else:
             st.warning("Données utilisateurs (USR02) non disponibles ou filtrées à vide.")
 
     elif st.session_state.current_section == "Détection d'Anomalies":
-        # --- Nouvelle section: Détection d'Anomalies ---
         st.header("🚨 Détection d'Anomalies (Temps de Réponse - Hitlist DB)")
         st.markdown("""
             Cette section utilise l'algorithme **Isolation Forest** pour détecter les anomalies dans les temps de réponse (`RESPTI`) des transactions SAP.
@@ -1281,12 +1155,10 @@ else:
         df_anomalies_hitlist = df_hitlist_filtered.copy() # Utiliser le DataFrame déjà filtré par date
         
         if not df_anomalies_hitlist.empty and 'RESPTI' in df_anomalies_hitlist.columns and 'FULL_DATETIME' in df_anomalies_hitlist.columns:
-            # S'assurer que 'respti' est numérique et ne contient pas d'infinis
             df_anomalies_hitlist['RESPTI'] = pd.to_numeric(df_anomalies_hitlist['RESPTI'], errors='coerce')
             df_anomalies_hitlist = df_anomalies_hitlist[np.isfinite(df_anomalies_hitlist['RESPTI'])].copy()
             
-            if not df_anomalies_hitlist.empty and df_anomalies_hitlist['RESPTI'].nunique() > 1: # Nécessite au moins 2 valeurs uniques pour IsolationForest
-                # Paramètre de contamination ajustable par l'utilisateur
+            if not df_anomalies_hitlist.empty and df_anomalies_hitlist['RESPTI'].nunique() > 1:
                 contamination_value = st.slider(
                     "Proportion attendue d'anomalies (contamination)",
                     min_value=0.001, max_value=0.1, value=0.01, step=0.001,
@@ -1314,10 +1186,10 @@ else:
                     title='Temps de Réponse (RESPTI) avec Anomalies Détectées',
                     labels={'FULL_DATETIME': 'Horodatage', 'RESPTI': 'Temps de Réponse (ms)'},
                     hover_data=['tcode', 'program', 'user', 'respti', 'is_anomaly', 'anomaly_score'],
-                    color_discrete_map={'Oui': 'red', 'Non': 'blue'} # Couleurs personnalisées
+                    color_discrete_map={'Oui': 'red', 'Non': 'blue'}
                 )
                 fig_scatter_anomalies.update_traces(marker=dict(size=5, opacity=0.7))
-                fig_scatter_anomalies.update_layout(hovermode="x unified") # Amélioration de l'interaction
+                fig_scatter_anomalies.update_layout(hovermode="x unified")
                 st.plotly_chart(fig_scatter_anomalies, use_container_width=True)
 
                 st.markdown("### Top 10 des Transactions Anormales (par score d'anomalie le plus bas)")
@@ -1342,4 +1214,5 @@ with st.expander("🔍 Afficher tous les DataFrames chargés (pour débogage)"):
             df.info(buf=buffer)
             st.text(buffer.getvalue())
 
-
+st.markdown("---")
+st.markdown("Développé avec ❤️ et Streamlit.")
