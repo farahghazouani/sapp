@@ -16,7 +16,7 @@ DATA_PATHS = {
     "hitlist_db": "HITLIST_DATABASE_final_cleaned_clean.xlsx",
     "times": "Times_final_cleaned_clean.xlsx",
     "tasktimes": "TASKTIMES_final_cleaned_clean.xlsx",
-    "usertcode": "usertcode_cleaned.xlsx",
+    "usertcode": "USERTCODE_cleaned.xlsx",
     "performance": "AL_GET_PERFORMANCE_final_cleaned_clean.xlsx",
     "sql_trace_summary": "performance_trace_summary_final_cleaned_clean.xlsx",
     "usr02": "usr02_data.xlsx",
