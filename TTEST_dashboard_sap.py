@@ -804,7 +804,7 @@ else:
             st.subheader("Aperçu des Données Utilisateurs Filtrées")
             st.dataframe(df_user.head())
         else:
-            st.warning("Données utilisateurs (USERTCODE) non disponibles ou filtrées à vide.")
+            st.warning("Données utilisateurs (usertcode) non disponibles ou filtrées à vide.")
 
     elif st.session_state.current_section == "Statistiques Horaires":
         # --- Onglet 3: Statistiques Horaires (Times_final_cleaned_clean.xlsx) ---
