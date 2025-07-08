@@ -668,7 +668,7 @@ else:
                 else:
                     st.info("La colonne 'ACCOUNT' est manquante dans le DataFrame 'usertcode' pour les transactions par utilisateur.")
             else:
-                st.warning("Données de transactions par utilisateur (USERTCODE) non disponibles ou filtrées à vide.")
+                st.warning("Données de transactions par utilisateur (usertcode) non disponibles ou filtrées à vide.")
 
             # NOUVELLE VISUALISATION : Tendance du Temps de Réponse Moyen par Heure
             st.subheader("Tendance du Temps de Réponse Moyen par Heure")
